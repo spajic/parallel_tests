@@ -68,6 +68,7 @@ module ParallelTests
       end
 
       def check_for_pending_migrations
+        puts "check pending migrations"
         ["db:abort_if_pending_migrations", "app:db:abort_if_pending_migrations"].each do |abort_migrations|
           if Rake::Task.task_defined?(abort_migrations)
             Rake::Task[abort_migrations].invoke
@@ -123,8 +124,12 @@ namespace :parallel do
     ParallelTests::Tasks.check_for_pending_migrations
     if defined?(ActiveRecord::Base) && [:ruby, :sql].include?(ActiveRecord::Base.schema_format)
       # fast: dump once, load in parallel
-      type = (ActiveRecord::Base.schema_format == :ruby ? "schema" : "structure")
-      Rake::Task["db:#{type}:dump"].invoke
+      if Gem::Version.new(Rails.version) >= Gem::Version.new('6.1.0')
+        Rake::Task["db:schema:dump"].invoke
+      else
+        type = (ActiveRecord::Base.schema_format == :ruby ? "schema" : "structure")
+        Rake::Task["db:#{type}:dump"].invoke
+      end
 
       # remove database connection to prevent "database is being accessed by other users"
       ActiveRecord::Base.remove_connection if ActiveRecord::Base.configurations.any?
@@ -163,7 +168,8 @@ namespace :parallel do
   end
 
   # load the structure from the structure.sql file
-  desc "Load structure for test databases via db:structure:load --> parallel:load_structure[num_cpus]"
+  # (faster for rails < 6.1, deprecated after and only configured by `ActiveRecord::Base.schema_format`)
+  desc "Load structure for test databases via db:schema:load --> parallel:load_structure[num_cpus]"
   task :load_structure, :count do |_, args|
     ParallelTests::Tasks.run_in_parallel(
       "#{ParallelTests::Tasks.rake_bin} #{ParallelTests::Tasks.purge_before_load} " \
@@ -189,7 +195,7 @@ namespace :parallel do
   ['test', 'spec', 'features', 'features-spinach'].each do |type|
     desc "Run #{type} in parallel with parallel:#{type}[num_cpus]"
     task type, [:count, :pattern, :options, :pass_through] do |_t, args|
-      ParallelTests::Tasks.check_for_pending_migrations
+      ParallelTests::Tasks.check_for_pending_migrations unless ENV['SKIP_MIGRATION_CHECK']
       ParallelTests::Tasks.load_lib
 
       count, pattern, options, pass_through = ParallelTests::Tasks.parse_args(args)
