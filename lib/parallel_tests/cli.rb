@@ -118,7 +118,9 @@ module ParallelTests
     def report_results(test_results, options)
       results = @runner.find_results(test_results.map { |result| result[:stdout] } * "")
       puts ""
+      puts "PARALLEL TESTS SUMMARY:"
       puts @runner.summarize_results(results)
+      puts "PARALLEL TESTS SUMMARY FINISH"
 
       report_failure_rerun_commmand(test_results, options)
     end
